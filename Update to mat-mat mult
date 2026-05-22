@@ -1,0 +1,390 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/motrieu/TC2037-Evidence-3/blob/main/Update%20to%20mat-mat%20mult\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "JTW_PvK5NrUU"
+      },
+      "source": [
+        "Small Example to test correctness with N=4, M=2 and an anisotropic number of blocks."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "%%writefile mat_calc.cu\n",
+        "\n",
+        "#include \"cuda_runtime.h\"\n",
+        "#include <stdlib.h>\n",
+        "#include <stdio.h>\n",
+        "#include <iostream>\n",
+        "\n",
+        "#define N 4\n",
+        "#define M 2\n",
+        "#define THREADS 4\n",
+        "\n",
+        "__global__ void matmult(float *a, float *b, float *x, float *c, int n, int m) {\n",
+        "  int row = threadIdx.x + blockIdx.x * blockDim.x;\n",
+        "  int column = threadIdx.y + blockIdx.y * blockDim.y;\n",
+        "\n",
+        "  int thread_id = row * m + column;\n",
+        "  while (thread_id < n*n) {\n",
+        "    int i = thread_id / n;\n",
+        "    float sum = 0;\n",
+        "    for (int j= 0; j<m; j++) {\n",
+        "      sum += a[i * m + j] * x[i + j * n];\n",
+        "    }\n",
+        "\n",
+        "    c[thread_id] = sum + b[i];\n",
+        "    thread_id += blockDim.x * gridDim.x;\n",
+        "  }\n",
+        "}\n",
+        "\n",
+        "void fill_a(float *a){\n",
+        "  for(int i=0; i<N; i++) {\n",
+        "    for(int j=0; j<M; j++) {\n",
+        "      a[j+i*M] = i < N/2 ;\n",
+        "    }\n",
+        "  }\n",
+        "\n",
+        "}\n",
+        "\n",
+        "void fill_b(float *b){\n",
+        "  for(int i=0;i<N*N;i++) {\n",
+        "    b[i] = 0;\n",
+        "  }\n",
+        "}\n",
+        "\n",
+        "void fill_x(float *x){\n",
+        "  for(int i=0;i<M;i++) {\n",
+        "    for(int j=0;j<N;j++) {\n",
+        "      x[j+i*N] = i<M/2;\n",
+        "    }\n",
+        "  }\n",
+        "}\n",
+        "\n",
+        "int main() {\n",
+        "  float *a, *b, *c, *x;\n",
+        "  float *d_a, *d_b, *d_c, *d_x;\n",
+        "\n",
+        "  const int mat_size = N*M*sizeof(float);\n",
+        "  const int output_size = N*N*sizeof(float);\n",
+        "\n",
+        "  cudaMalloc((void**)&d_a, mat_size);\n",
+        "\tcudaMalloc((void**)&d_b, output_size);\n",
+        "\tcudaMalloc((void**)&d_c, output_size);\n",
+        "  cudaMalloc((void**)&d_x, mat_size);\n",
+        "\n",
+        "  a = (float*)malloc(mat_size);\n",
+        "\tb = (float*)malloc(output_size);\n",
+        "\tc = (float*)malloc(output_size);\n",
+        "  x = (float*)malloc(mat_size);\n",
+        "\n",
+        "  fill_a(a);\n",
+        "  fill_b(b);\n",
+        "  fill_x(x);\n",
+        "\n",
+        "  cudaMemcpy(d_a, a, mat_size, cudaMemcpyHostToDevice);\n",
+        "  cudaMemcpy(d_b, b, output_size, cudaMemcpyHostToDevice);\n",
+        "  cudaMemcpy(d_x, x, mat_size, cudaMemcpyHostToDevice);\n",
+        "\n",
+        "  dim3 blocks(2, 4);\n",
+        "  dim3 threads(2, 2);\n",
+        "\n",
+        "  matmult << <blocks, threads >> >(d_a, d_b, d_x, d_c, N, M);\n",
+        "\n",
+        "  cudaMemcpy(c, d_c, output_size, cudaMemcpyDeviceToHost);\n",
+        "\n",
+        "  std::cout << \"A: \" << std::endl;\n",
+        "  for(int i=0; i<N; i++) {\n",
+        "    for(int j=0; j<M; j++){\n",
+        "      std::cout << a[i*M + j] << \" \";\n",
+        "    }\n",
+        "    std::cout << std::endl;\n",
+        "  }\n",
+        "\n",
+        "  std::cout << \"X: \" << std::endl;\n",
+        "  for(int i=0; i<M; i++) {\n",
+        "    for(int j=0; j<N; j++){\n",
+        "      std::cout << x[i*N + j] << \" \";\n",
+        "    }\n",
+        "    std::cout << std::endl;\n",
+        "  }\n",
+        "\n",
+        "  std::cout << \"B: \" << std::endl;\n",
+        "  for(int i=0; i<N; i++) {\n",
+        "    for(int j=0; j<N; j++){\n",
+        "      std::cout << b[i*N + j] << \" \";\n",
+        "    }\n",
+        "    std::cout << std::endl;\n",
+        "  }\n",
+        "\n",
+        "\n",
+        "  std::cout << \"C: \" << std::endl;\n",
+        "  for(int i=0; i<N; i++) {\n",
+        "    for(int j=0; j<N; j++){\n",
+        "      std::cout << c[i*N + j] << \" \";\n",
+        "    }\n",
+        "    std::cout << std::endl;\n",
+        "  }\n",
+        "\n",
+        "  free(a);\n",
+        "  free(b);\n",
+        "  free(x);\n",
+        "  free(c);\n",
+        "\n",
+        "  cudaFree(a);\n",
+        "  cudaFree(b);\n",
+        "  cudaFree(x);\n",
+        "  cudaFree(c);\n",
+        "\n",
+        "  return 0;\n",
+        "\n",
+        "}\n",
+        "\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "sUtTw_5Eu01F",
+        "outputId": "0e7b7631-c941-4fdc-c5c7-58f50e034acb"
+      },
+      "execution_count": 162,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Overwriting mat_calc.cu\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "!nvcc -arch=sm_75 mat_calc.cu -o mat_calc\n",
+        "!./mat_calc"
+      ],
+      "metadata": {
+        "id": "SsSYjhVEIfQS",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "5d749c17-0bc8-4e17-e61e-b86891a00cc4"
+      },
+      "execution_count": 163,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "A: \n",
+            "1 1 \n",
+            "1 1 \n",
+            "0 0 \n",
+            "0 0 \n",
+            "X: \n",
+            "1 1 1 1 \n",
+            "0 0 0 0 \n",
+            "B: \n",
+            "0 0 0 0 \n",
+            "0 0 0 0 \n",
+            "0 0 0 0 \n",
+            "0 0 0 0 \n",
+            "C: \n",
+            "1 1 1 1 \n",
+            "1 1 1 1 \n",
+            "0 0 0 0 \n",
+            "0 0 0 0 \n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Example to measure time between single and multi core"
+      ],
+      "metadata": {
+        "id": "Nc6ixjkSUfRi"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "%%writefile mat_calc_timed.cu\n",
+        "\n",
+        "#include \"cuda_runtime.h\"\n",
+        "#include <stdlib.h>\n",
+        "#include <stdio.h>\n",
+        "#include <iostream>\n",
+        "#include <chrono>\n",
+        "\n",
+        "#define N 8192 /  2\n",
+        "#define M 2048\n",
+        "#define THREADS 4\n",
+        "\n",
+        "__global__ void matmult(float *a, float *b, float *x, float *c, int n, int m) {\n",
+        "  int row = threadIdx.x + blockIdx.x * blockDim.x;\n",
+        "  int column = threadIdx.y + blockIdx.y * blockDim.y;\n",
+        "\n",
+        "  int thread_id = row * m + column;\n",
+        "  while (thread_id < n*n) {\n",
+        "    int i = thread_id / n;\n",
+        "    float sum = 0;\n",
+        "    for (int j= 0; j<m; j++) {\n",
+        "      sum += a[i * m + j] * x[i + j * n];\n",
+        "    }\n",
+        "\n",
+        "    c[thread_id] = sum + b[i];\n",
+        "    thread_id += blockDim.x * gridDim.x;\n",
+        "  }\n",
+        "}\n",
+        "\n",
+        "void fill_a(float *a){\n",
+        "  for(int i=0; i<N; i++) {\n",
+        "    for(int j=0; j<M; j++) {\n",
+        "      a[j+i*M] = i < N/2 ;\n",
+        "    }\n",
+        "  }\n",
+        "\n",
+        "}\n",
+        "\n",
+        "void fill_b(float *b){\n",
+        "  for(int i=0;i<N*N;i++) {\n",
+        "    b[i] = 0;\n",
+        "  }\n",
+        "}\n",
+        "\n",
+        "void fill_x(float *x){\n",
+        "  for(int i=0;i<M;i++) {\n",
+        "    for(int j=0;j<N;j++) {\n",
+        "      x[j+i*N] = i<M/2;\n",
+        "    }\n",
+        "  }\n",
+        "}\n",
+        "\n",
+        "int main() {\n",
+        "  float *a, *b, *c, *x;\n",
+        "  float *d_a, *d_b, *d_c, *d_x;\n",
+        "\n",
+        "  const int mat_size = N*M*sizeof(float);\n",
+        "  const int output_size = N*N*sizeof(float);\n",
+        "\n",
+        "  cudaMalloc((void**)&d_a, mat_size);\n",
+        "\tcudaMalloc((void**)&d_b, output_size);\n",
+        "\tcudaMalloc((void**)&d_c, output_size);\n",
+        "  cudaMalloc((void**)&d_x, mat_size);\n",
+        "\n",
+        "  a = (float*)malloc(mat_size);\n",
+        "\tb = (float*)malloc(output_size);\n",
+        "\tc = (float*)malloc(output_size);\n",
+        "  x = (float*)malloc(mat_size);\n",
+        "\n",
+        "  fill_a(a);\n",
+        "  fill_b(b);\n",
+        "  fill_x(x);\n",
+        "\n",
+        "  cudaMemcpy(d_a, a, mat_size, cudaMemcpyHostToDevice);\n",
+        "  cudaMemcpy(d_b, b, output_size, cudaMemcpyHostToDevice);\n",
+        "  cudaMemcpy(d_x, x, mat_size, cudaMemcpyHostToDevice);\n",
+        "\n",
+        "  // Single Core\n",
+        "  dim3 blocks_single(1, 1);\n",
+        "  dim3 threads_single(1, 1);\n",
+        "  auto start_single = std::chrono::high_resolution_clock::now();\n",
+        "  matmult << <blocks_single, threads_single >> >(d_a, d_b, d_x, d_c, N, M);\n",
+        "  auto stop_single = std::chrono::high_resolution_clock::now();\n",
+        "\n",
+        "  // Multi Core\n",
+        "  dim3 blocks_multi((N / THREADS) / 2, (N / THREADS) / 2);\n",
+        "  dim3 threads_multi(THREADS, THREADS);\n",
+        "  auto start_multi = std::chrono::high_resolution_clock::now();\n",
+        "  matmult << <blocks_multi, threads_multi >> >(d_a, d_b, d_x, d_c, N, M);\n",
+        "  auto stop_multi = std::chrono::high_resolution_clock::now();\n",
+        "\n",
+        "  cudaMemcpy(c, d_c, output_size, cudaMemcpyDeviceToHost);\n",
+        "\n",
+        "  free(a);\n",
+        "  free(b);\n",
+        "  free(x);\n",
+        "  free(c);\n",
+        "\n",
+        "  cudaFree(a);\n",
+        "  cudaFree(b);\n",
+        "  cudaFree(x);\n",
+        "  cudaFree(c);\n",
+        "\n",
+        "  auto single_time = std::chrono::duration_cast< std::chrono::microseconds>(stop_single - start_single).count();\n",
+        "  auto multi_time = std::chrono::duration_cast< std::chrono::microseconds>(stop_multi - start_multi).count();\n",
+        "\n",
+        "  std::cout << \"Single Core: \" <<  single_time << std::endl;\n",
+        "  std::cout << \"Multi Core: \" << multi_time << std::endl;\n",
+        "  std::cout << \"Speedup: \" << single_time / multi_time << std::endl;\n",
+        "\n",
+        "  return 0;\n",
+        "\n",
+        "}\n",
+        "\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "DPV_Im0EUfq7",
+        "outputId": "b506b6c4-f7e1-4f54-d10c-8a0b8e035ba4"
+      },
+      "execution_count": 171,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Overwriting mat_calc_timed.cu\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "!nvcc -arch=sm_75 mat_calc_timed.cu -o mat_calc_timed\n",
+        "!./mat_calc_timed"
+      ],
+      "metadata": {
+        "id": "923--DdMVjfM"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "accelerator": "GPU",
+    "colab": {
+      "gpuType": "T4",
+      "provenance": [],
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "display_name": "Python 3",
+      "name": "python3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
