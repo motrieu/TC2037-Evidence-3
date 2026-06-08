@@ -15,15 +15,15 @@
 \maketitle
 
 \section{Introduction}
-The problem chosen was the calculation of a linear matrix combination $\mu(AX + b)$, where $A \in N \times M$,$x \in N \times M$ and $b \in N$. This computation is the basis of modern deep learning as it is the attribute computation in a feed-forwards layer as can be found in literature, for example in \cite{Goodfellow-et-al-2016}. In application $N$ and $M$ can be very large for example $N, M > 10,000$. In this case calculating the matrix product can be very demanding for a single core or thread. To speed up the process, the paradigm of parallelization was chosen. This splits up the operations onto different cores that can calculate different elements of the solution at the same time. In an optimal world this would reduce the computation time by the number of available cores $T_{\text{parallel}} = \frac{T_{\text{single}}}{N_{\text{cores}}}$. This is especially helpful if a large number of cores is available such as in GPUs.
+The problem chosen was the calculation of a linear matrix combination $\mu(AX + B)$, where $A \in N \times M$,$x \in M \times N$ and $B \in N \times N$. This computation is the basis of modern deep learning as it is part of the computation in a feed-forward layer as can be found in literature, for example in \cite{Goodfellow-et-al-2016}. In application $N$ and $M$ can be very large for example $N, M > 10,000$. In this case calculating the matrix product can be very demanding for a single core or thread. To speed up the process, the paradigm of parallelization was chosen. This splits up the operations onto different cores that can calculate different elements of the solution at the same time. In an optimal world this would reduce the computation time by the number of available cores $T_{\text{parallel}} = \frac{T_{\text{single}}}{N_{\text{cores}}}$. This is especially helpful if a large number of cores is available such as in GPUs.
 
 \section{Model}
 Splitting matrix addition into multiple parts is straight forward. Each thread can attach to one unique cell in the solution matrix, add the corresponding cells of the input matrices and write the solution into the corresponding matrix. Therefore, each cell can be extracted into an individual task. Thus the main challenge is the index linearization from the host matrix to the device  vector.
 
-Matrix multiplication on the other hand becomes a bit more complicated. Calculating the $i_{th}$ component of the output vector is defined as $c_i = \sum_{j=0}^{M-1} a_{ij} \cdot x_{ji}$. Splitting up the task is for each matrix element of the output vector leaves each task with M operations. While easiest to implement it limits the distribution of work and each tasks workload scales with the size of the problem. 
+Matrix multiplication on the other hand becomes a bit more complicated. Calculating the $i_{th}$ component of the output vector is defined as $c_i = \sum_{j=0}^{M-1} a_{ij} \cdot x_{ji}$. Splitting up the task for each element of the output matrix leaves each task with M operations. While easiest to implement it limits the distribution of work and each tasks workload scales with the size of the problem. 
 
 \subsection{Linearization of Indices}
-When copying matrices to the GPU memory, they get linearized row by row into an array as can be seen in Fig. \ref{fig:mat_lin}. The index mapping from matrix to vector can be calculated by $i_{vec} = i_{mat}\cdot N + j_{mat}$. From a visual standpoint this means a column index gets offset by the number of full rows prior. 
+When copying matrices to the GPU memory, they get linearized row by row into an array as can be seen in Fig. \ref{fig:mat_lin}. The index mapping from matrix to vector can be calculated by $i_{vec} = i_{mat}\cdot N + j_{mat}$. From a visual standpoint this means a column index gets offset by the number of full prior rows. 
 
 \begin{figure}
     \centering
@@ -45,7 +45,7 @@ When copying matrices to the GPU memory, they get linearized row by row into an 
     \label{fig:mat_lin}
 \end{figure}
 
-In the case of CUDA, each core also uses threads. Still, it might hold true, that the problem size bigger than the number of available threads. In this case we need a way to assign tasks without the possibility of threads overlapping tasks. To this end, we first need the global thread ID which can be calculated using $i_{\text{global}} = i_{\text{thread}} + i_{\text{block}} \cdot d_{\text{block}}$. The dimension of a block is the number of threads per block. So the local ID is comprised of the global amount of threads per core before with the local thread ID. To assign to this thread a new task, we can add the number of globally available threads, so we shift the global position by the entire size of the thread pool. This can be done until the size of the problem is reached as is visible in Lst. \ref{lst:pool}.
+CUDA divides the available resources into blocks which in term have a certain amount of threads. Further, it might hold true tho, that the problem size is bigger than the number of available threads. In this case we need a way to assign tasks without the possibility of threads overlapping tasks. To this end, we first need the global thread ID which can be calculated using $i_{\text{global}} = i_{\text{thread}} + i_{\text{block}} \cdot d_{\text{block}}$. The dimension of a block is the number of threads per block. So the global ID is comprised of the amount of threads of blocks beforehand together with the local thread ID. To assign to this thread a new task, we can add the number of globally available threads, so we shift the global position by the entire size of the thread pool. This can be done until the size of the problem is reached as is visible in Lst. \ref{lst:pool}.
 
 \begin{lstlisting}[mathescape=true, language=C++, caption=Assignment of threads when the problem size is bigger than the available pool. $\label{lst:pool}$]
 int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -57,7 +57,7 @@ while (i < vec_size) {
 }
 \end{lstlisting}
 
-Each block is limited to a number of threads as specified in \cite{cuda2026}. This means one has to increase the number of blocks. Since each block has an integer ID, the number of IDs are limited. In big problems with a large amount of cores, where these IDs are not sufficient, one can make the threads 2 dimensional, squaring the number of available IDs. In this case, the global thread ID can be calculated by first calculating the global row and column index from the thread and block IDs which then in turn can be used to calculate the global thread ID as can be seen in in Lst. \ref{lst:2dblock}
+As implied by Lst. \ref{lst:pool} the dimensions and ids are potentially multi-dimensional. Each block is limited to a number of threads as specified in \cite{cuda2026}. This means one has to increase the number of blocks. Since each block has an integer ID, the number of IDs are limited. In big problems with a large amount of cores, where these IDs are not sufficient, one can make the threads 2 dimensional, squaring the number of available IDs. In this case, the global thread ID can be calculated by first calculating the global row and column index from the thread and block IDs which then in turn can be used to calculate the global thread ID as can be seen in in Lst. \ref{lst:2dblock}
 
 \begin{lstlisting}[mathescape=true, language=C++, caption=Computing the global thread ID in the case of 2D blocks. $\label{lst:2dblock}$]
 int row = threadIdx.x + blockIdx.x * blockDim.x;
@@ -116,7 +116,7 @@ The first test uses a small example of $N=4$, $M=2$ with an anisotropic number o
     \end{bmatrix}
 \end{equation}
 
-The second test measures the speed difference between single-core and multi-core for different problem sizes. The problem base size is $N = 4096$ and $M = 1024$ and is reduced by powers of 2. The number of threads for the multi-core case is kept constant at 256 with the number of blocks adapting to the problem of the size. The results can be seen in Fig. \ref{fig:singlevmulti}. It can be seen that with increasing problem size the time saving approaches roughly the number of threads. This is the expected behavior. In the implementation notebook, the startup time is also measured, which includes memory allocation, initialization and copying. It can be observed that the start-up time makes up the largest amount of time with increasing problem size and therefore places a limiting factor. 
+The second test measures the speed difference between single-core and multi-core for different problem sizes. The base problem size is $N = 4096$ and $M = 1024$ and is reduced by powers of 2. The number of threads for the multi-core case is kept constant at 256 with the number of blocks adapting to the problem of the size. The results can be seen in Fig. \ref{fig:singlevmulti}. It can be seen that with increasing problem size the time saving approaches roughly the number of threads. This is the expected behavior. In the implementation notebook, the startup time is also measured, which includes memory allocation, initialization and copying. It can be observed that the start-up time makes up the largest amount of time with increasing problem size and therefore places a limiting factor. 
 
 The third test compares the runtime of using an increasing amount of threads with a constant problem size of $N = 4096$ and $M = 1024$. The resulting data can be seen in Fig. \ref{fig:threads} and shows a decrease in runtime with increasing threads as expected.
 
@@ -200,6 +200,9 @@ If given the number of threads $T$ and single-core runtime $\tau$, it is expecte
 To conclude, parallelizing matrix-matrix multiplication has a significant advantage for runtime, scaling with the amount of available threads, limited by the problem size and the memory bandwidth. Achieving the same result is not possible with other paradigms. The closest paradigm would be threading. But as threading is more used for asynchronous tasks, which in application is usually not the case, the use of threading might only be useful in very specific, low power cases. 
 
 This evidence so far has only described the linear part of an FFN-layer. To make an FFN-layer, a non-linear activation function is needed. This activation function is usually configured from the user and therefore not predetermined and can in theory be any kind of non-linear, single dimensional function (some other restrictions do apply, but are not important here) as described for example in \cite{Goodfellow-et-al-2016}. Thus, to make a fully functioning layer, the paradigm of functional programming is needed, to be enable the user to pass custom activation functions into the layer that can be the applied element-wise. This paradigm therefore can be used to extend this evidence.  
+In Fig. \ref{fig:threads} we can observe the drastic decrease in runtime with increasing thread number.
+But it becomes also apparent, the infinetly increasing thread count eventually bottoms out the effect, 
+so it can be important to balance speed increase with efficiency.
 
 \bibliographystyle{apalike}
 \bibliography{lib}

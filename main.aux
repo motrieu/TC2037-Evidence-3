@@ -1,0 +1,35 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{Goodfellow-et-al-2016}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Model}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Linearization of Indices}{1}{subsection.2.1}\protected@file@percent }
+\citation{cuda2026}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Linearizing a matrix by appending each row onto the previous.}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:mat_lin}{{1}{2}{Linearizing a matrix by appending each row onto the previous}{figure.1}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}Assignment of threads when the problem size is bigger than the available pool. $$}{2}{lstlisting.1}\protected@file@percent }
+\newlabel{lst:pool}{{1}{2}{Linearization of Indices}{lstlisting.1}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {2}Computing the global thread ID in the case of 2D blocks. $$}{2}{lstlisting.2}\protected@file@percent }
+\newlabel{lst:2dblock}{{2}{2}{Linearization of Indices}{lstlisting.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Implementation}{3}{section.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3}Element-wise matrix multiplication. $$}{3}{lstlisting.3}\protected@file@percent }
+\newlabel{lst:matmul}{{3}{3}{Implementation}{lstlisting.3}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4}Setup of 2D blocks using dim3. $$}{3}{lstlisting.4}\protected@file@percent }
+\newlabel{lst:dim3}{{4}{3}{Implementation}{lstlisting.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Test}{3}{section.4}\protected@file@percent }
+\citation{opencsf}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Runtime comparison of the single core vs. multi core application. With increasing problem size we can see that the time relative time savings get better as the constant setup runtime of distributions stays the same for the problem size.}}{4}{figure.2}\protected@file@percent }
+\newlabel{fig:singlevmulti}{{2}{4}{Runtime comparison of the single core vs. multi core application. With increasing problem size we can see that the time relative time savings get better as the constant setup runtime of distributions stays the same for the problem size}{figure.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Analysis}{4}{section.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Decrease of runtime with increasing number of used threads. It can be seen that increasing the number of threads drastically reduces computation time which is expected. It can also be seen, that for the given problem size, increasing the number of threads after a certain point does not lead to more efficiency. }}{5}{figure.3}\protected@file@percent }
+\newlabel{fig:threads}{{3}{5}{Decrease of runtime with increasing number of used threads. It can be seen that increasing the number of threads drastically reduces computation time which is expected. It can also be seen, that for the given problem size, increasing the number of threads after a certain point does not lead to more efficiency}{figure.3}{}}
+\citation{Goodfellow-et-al-2016}
+\bibstyle{apalike}
+\bibdata{lib}
+\bibcite{Goodfellow-et-al-2016}{Goodfellow et~al., 2016}
+\bibcite{cuda2026}{NVIDIA, 2026}
+\bibcite{opencsf}{Open-CSF, 2026}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{6}{section.6}\protected@file@percent }
+\gdef \@abspage@last{6}
